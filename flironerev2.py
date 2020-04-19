@@ -20,6 +20,7 @@ class FlirOneR2:
         # was it found?
         if self.dev is None:
             raise ValueError('Device not found')
+            self.active=False
 #        else:
 #            print(self.dev)
 
@@ -28,17 +29,36 @@ class FlirOneR2:
             self.dev.set_configuration()
         except usb.core.USBError:
             print("Could not set config (try 1)")
+            data=bytes([0,0])
+            print("STOP interface 2 FRAME..",end='')
+            r = self.dev.ctrl_transfer(
+                    bmRequestType=1,
+                    bRequest=0x0B,
+                    wValue=0,
+                    wIndex=2,
+                    data_or_wLength=data,
+                    timeout=100)
+            print(r)
+
+            print("STOP interface 1 FILEIO..",end='')
+            r = self.dev.ctrl_transfer(
+                    bmRequestType=1,
+                    bRequest=0x0B,
+                    wValue=0,
+                    wIndex=1,
+                    data_or_wLength=data,
+                    timeout=100)
+
+            print(r)
+            time.sleep(3)
             try:
                 self.dev.set_configuration()
             except usb.core.USBError:
                 print("Could not set config (try 2)")
-                try:
-                    self.dev.set_configuration()
-                except usb.core.USBError:
-                    print("Could not set config (try 3)")
-                    print("Failed to init camera")
-                    self.active=False
-                    return
+                print("Failed to init Camera!")
+                self.active=False
+                return
+
         #self.conf = self.dev.get_active_configuration()
         #self.intf = self.conf[(0,0)]
 
@@ -74,7 +94,7 @@ class FlirOneR2:
                 timeout=100)
         print(r)
         time.sleep(0.1)
-        print("STOP interface 1 FILEIO",end='')
+        print("STOP interface 1 FILEIO..",end='')
         r = self.dev.ctrl_transfer(
                 bmRequestType=1,
                 bRequest=0x0B,
@@ -84,7 +104,7 @@ class FlirOneR2:
                 timeout=100)
         print(r)
         time.sleep(0.1)
-        print("START interface 1 FILEIO",end='')
+        print("START interface 1 FILEIO..",end='')
         r = self.dev.ctrl_transfer(
                 bmRequestType=1,
                 bRequest=0x0B,
@@ -163,18 +183,21 @@ class FlirOneR2:
     def getThermal(self):
         # Create a python image from raw data
         thermal_data = self.thermal_data
-        new = Image.new('I',(160, 120))
+        new = Image.new('I;16',(160, 120))
         if thermal_data:
             pixels = new.load()
 
             for y in range(0,120):
                 for x in range(0,160):
                     if x<80:
-                        v = thermal_data[2*(y*164+x)+4] + thermal_data[2*(y*164+x)+5]
+                        v = thermal_data[2*(y * 164 + x) +4]+256*thermal_data[2*(y * 164 + x) +5]
                     else:
-                        v = thermal_data[2*(y*164+x)+8] + thermal_data[2*(y*164+x)+9]
-                    #print("%s,%s:\t%s"%(x,y,v))
+                        v = thermal_data[2*(y * 164 + x) +4+4]+256*thermal_data[2*(y * 164 + x) +5+4]
+                    v= (v>>4)
                     pixels[x,y] = v
+
+                    p=pixels[x,y]
+                    #print("%s,%s:\t%s\t%s"%(x,y,v,p))
         else:
             print("Error, no data")
         return new
@@ -194,7 +217,7 @@ class FlirOneR2:
                 timeout=100)
         print(r)
 
-        print("STOP interface 1 FILEIO",end='')
+        print("STOP interface 1 FILEIO..",end='')
         r = self.dev.ctrl_transfer(
                 bmRequestType=1,
                 bRequest=0x0B,
