@@ -18,6 +18,9 @@ class FlirOneR2:
         self.jpeg_data       =None
         self.status_data     =None
         self.active=False
+        self.maxvloc=(0,0)
+        self.maxv=0
+        self.maxvc =0.0
         # was it found?
         if self.dev is None:
             raise ValueError('Device not found')
@@ -206,27 +209,34 @@ class FlirOneR2:
         new = Image.new('I;16',(160, 120))
         if thermal_data:
             pixels = new.load()
-            maxv = 0
+            self.maxv = 0
+            maxvloc = (0,0)
             for y in range(0,120):
                 for x in range(0,160):
                     if x<80:
                         v = thermal_data[2*(y * 164 + x) +4]+256*thermal_data[2*(y * 164 + x) +5]
                     else:
                         v = thermal_data[2*(y * 164 + x) +4+4]+256*thermal_data[2*(y * 164 + x) +5+4]
-                    if v>maxv:
-                        maxv=v
+                    if v>self.maxv:
+                        self.maxvloc=(x,y)
+                        self.maxv=v
                     v= (v>>4)
                     pixels[x,y] = v
 
                     p=pixels[x,y]
                     #print("%s,%s:\t%s\t%s"%(x,y,v,p))
             try:
-                print("Max Value:%s (%s)"%(maxv,self.raw2temp(maxv)))
+                self.maxvc = self.raw2temp(self.maxv)
             except ValueError:
                 print("Error comparing temp")
         else:
             print("Error, no data")
         return new
+
+    def getMaxTempLoc(self):
+        return(self.maxvloc,self.maxv)
+        pass
+
 
     def getImage():
         return self.jpeg_data
