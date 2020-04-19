@@ -4,6 +4,7 @@ import struct
 import pickle
 from PIL import Image, ImageDraw
 import time
+import math
 
 class FlirOneR2:
 
@@ -151,7 +152,7 @@ class FlirOneR2:
                 self.buffer=buf85
                 self.byteCount=len(buf85)
                 self.FrameSize,self.ThermalSize,self.JpgSize,self.StatusSize = struct.unpack("<LLLL",self.buffer[8:24])
-                print("I saw the magic! (%s)"%(len(buf85)))
+                #print("I saw the magic! (%s)"%(len(buf85)))
             else:
                 #sometimes we get a first packet without start magic.
                 if self.buffer==None:
@@ -159,9 +160,9 @@ class FlirOneR2:
                 self.buffer += buf85
                 self.byteCount += len(buf85)
             # Are we done with a frame?
-            print("%s\t%s"%(self.byteCount,self.FrameSize))
+            #print("%s\t%s"%(self.byteCount,self.FrameSize))
             if self.byteCount>=(28+self.FrameSize):
-                print("Have Frame!")
+                #print("Have Frame!")
                 self.packetCount += 1
                 self.thermal_data    = self.buffer[28:28+self.ThermalSize]
                 self.jpeg_data       = self.buffer[28+self.ThermalSize:28+self.ThermalSize+self.JpgSize]
@@ -179,6 +180,25 @@ class FlirOneR2:
             pass
 
         return
+    def raw2temp(self,RAW):
+        PlanckR1 = 16528.178
+        PlanckB = 1427.5
+        PlanckF = 1.0
+        PlanckO = -1307.0
+        PlanckR2 = 0.012258549
+
+        TempReflected = 20.0     # Reflected Apparent Temperature [°C]
+        Emissivity = 0.95  # Emissivity of object
+
+        # mystery correction factor
+        RAW =RAW*4;
+        # calc amount of radiance of reflected objects ( Emissivity < 1 )
+        RAWrefl=PlanckR1/(PlanckR2*(math.exp(PlanckB/(TempReflected+273.15))-PlanckF))-PlanckO;
+        # get displayed object temp max/min
+        RAWobj=(RAW-(1-Emissivity)*RAWrefl)/Emissivity;
+        # calc object temperature
+        return PlanckB/math.log(PlanckR1/(PlanckR2*(RAWobj+PlanckO))+PlanckF)-273.15;
+
 
     def getThermal(self):
         # Create a python image from raw data
@@ -186,18 +206,24 @@ class FlirOneR2:
         new = Image.new('I;16',(160, 120))
         if thermal_data:
             pixels = new.load()
-
+            maxv = 0
             for y in range(0,120):
                 for x in range(0,160):
                     if x<80:
                         v = thermal_data[2*(y * 164 + x) +4]+256*thermal_data[2*(y * 164 + x) +5]
                     else:
                         v = thermal_data[2*(y * 164 + x) +4+4]+256*thermal_data[2*(y * 164 + x) +5+4]
+                    if v>maxv:
+                        maxv=v
                     v= (v>>4)
                     pixels[x,y] = v
 
                     p=pixels[x,y]
                     #print("%s,%s:\t%s\t%s"%(x,y,v,p))
+            try:
+                print("Max Value:%s (%s)"%(maxv,self.raw2temp(maxv)))
+            except ValueError:
+                print("Error comparing temp")
         else:
             print("Error, no data")
         return new
